@@ -229,4 +229,10 @@ pyrightconfig.json
 pyvenv.cfg
 pip-selfcheck.json
 
+data/
+
+train.csv
+validate.csv
+model/
+
 # End of https://www.toptal.com/developers/gitignore/api/macos,python,venv,jupyternotebooks
