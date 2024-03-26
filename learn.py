@@ -1,7 +1,7 @@
 from torch.utils.data import Dataset, DataLoader
 from transformers import BertTokenizerFast, GPT2LMHeadModel
 from tqdm import tqdm
-from sklearn.metrics import roc_auc_score, f1_score
+from sklearn.metrics import f1_score
 
 import torch
 import pickle
@@ -12,7 +12,7 @@ LOCATION = '.'
 
 # GPT-3 모델과 토크나이저 불러오기
 tokenizer = BertTokenizerFast.from_pretrained("kykim/gpt3-kor-small_based_on_gpt2")
-max_length = 100
+max_length = 64
 loader_size = 16
 
 # 훈련용 및 검증용 데이터셋 클래스 정의
@@ -101,12 +101,11 @@ for epoch in tqdm(range(epochs)):
     train_loss = train(train_loader, model, optimizer)
     validate_loss, roc_auc, f1 = validate(validate_loader, model)
 
-    print(f"Epoch {epoch + 1}/{epochs}, Train Loss: {train_loss}, Validate Loss: {validate_loss}, ROC-AUC: {roc_auc}, F1 Score: {f1}")
+    print(f"Epoch {epoch + 1}/{epochs}, Train Loss: {train_loss}, Validate Loss: {validate_loss}, F1 Score: {f1}")
     all_metrics.append({
         'epoch':epoch + 1,
         'train_loss': train_loss,
         'val_loss': validate_loss,
-        'roc_auc': roc_auc,
         'f1': f1
     })
     with open("{LOCATION}/all_metrics.pkl", "wb") as f:
