@@ -3,6 +3,9 @@ from typing import List, Dict
 import json
 import pandas as pd
 import os
+import re
+
+replaced = r"^\"|\"$"
 
 def read_json_file(file_path: str) -> pd.DataFrame:
     """
@@ -11,12 +14,12 @@ def read_json_file(file_path: str) -> pd.DataFrame:
     :return: JSON 파일을 파싱한 리스트
     """
 
-    df = pd.DataFrame(columns=['text', 'corrected'])
+    df = pd.DataFrame(columns=['id', 'text', 'corrected'])
 
     # JSON 파일 읽어오기
     with open(file_path, 'r', encoding='utf-8-sig') as f:
         data: Dict = json.load(f)
-        df.loc[len(df)] = {'text': data.get('ko'), 'corrected': data.get('corrected')}
+        df.loc[len(df)] = {'id': file_path, 'text': data.get('ko'), 'corrected':  re.sub(replaced,'', str(data.get('corrected'))).strip()}
     
     return df
 
