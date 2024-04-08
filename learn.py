@@ -88,16 +88,17 @@ def compute_metrics(eval_pred):
 data_collactor = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
 training_args = TrainingArguments(
-    output_dir=f"{LOCATION}/model", 
-    overwrite_output_dir=True,  
-    learning_rate=2e-5,  
-    num_train_epochs=5,
-    per_device_train_batch_size=16,
+    output_dir=f"{LOCATION}/model", # 모델 저장 경로
+    overwrite_output_dir=True,  # 기존 모델을 덮어쓰기
+    learning_rate=2e-5,  # 학습률 설정
+    num_train_epochs=5,  # 학습 에포크 설정
+    evaluation_strategy="epoch",  # 평가 스트레티지 설정
+    per_device_train_batch_size=16,  # 배치 크기 설정
     per_device_eval_batch_size=16,
-    save_steps=1000,  
-    save_total_limit=10,  
-    warmup_steps=500,  
-    weight_decay=0.01
+    save_steps=1000,  # 모델 저장 스텝 설정
+    save_total_limit=10,  # 최대 모델 저장 개수 설정
+    warmup_steps=500,  # 워밍업 스텝 설정
+    weight_decay=0.01,
 )
 
 trainer = Trainer(
