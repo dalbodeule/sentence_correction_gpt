@@ -111,5 +111,5 @@ trainer = Trainer(
     compute_metrics=compute_metrics
 )
 
-trainer.train(resume_from_checkpoint = True if get_latest_checkpoint(f'{LOCATION}/bart/') else False)
-trainer.save_model(f"{LOCATION}/model")
+trainer.train(resume_from_checkpoint = True if get_latest_checkpoint(f'{LOCATION}/model/') else False)
+trainer.save_model(f"{LOCATION}/gpt3")
