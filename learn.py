@@ -12,23 +12,33 @@ tokenizer = PreTrainedTokenizerFast.from_pretrained("skt/kogpt2-base-v2",
                                                       pad_token='<pad>', mask_token='<mask>')
 max_length = 128
 
-# 훈련용 및 검증용 데이터셋 클래스 정의
 class TextDataset(Dataset):
     def __init__(self, data, tokenizer, max_length):
         self.data = data
         self.tokenizer = tokenizer
         self.max_length = max_length
+        self.bos_token = '<s>'
+        self.eos_token = '</s>'
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, idx):
-        input_text = f'</s>{str(self.data.iloc[idx]['text'])}</s>'
-        output_text = f'</s>{str(self.data.iloc[idx]['corrected'])}</s>'
-        input_ids = self.tokenizer.encode(input_text, max_length=self.max_length, truncation=True, padding='max_length')
-        output_ids = self.tokenizer.encode(output_text, max_length=self.max_length, truncation=True, padding='max_length')
+        input_text = str(self.data.iloc[idx]['text'])
+        corrected_text = str(self.data.iloc[idx]['corrected'])
+
+        # Tokenize input and output texts
+        input_ids = self.tokenizer.encode(self.bos_token + input_text + self.eos_token, 
+                                          max_length=self.max_length, truncation=True, padding='max_length')
+        output_ids = self.tokenizer.encode(self.bos_token + corrected_text + self.eos_token, 
+                                           max_length=self.max_length, truncation=True, padding='max_length')
+
+        # Create attention mask for inputs (0s where padded, 1s elsewhere)
+        attention_mask = [1 if token != self.tokenizer.pad_token_id else 0 for token in input_ids]
+
         return {
             'input_ids': torch.tensor(input_ids, dtype=torch.long),
+            'attention_mask': torch.tensor(attention_mask, dtype=torch.long),
             'labels': torch.tensor(output_ids, dtype=torch.long)
         }
 
@@ -97,7 +107,7 @@ training_args = TrainingArguments(
     overwrite_output_dir=True,  # 기존 모델을 덮어쓰기
     learning_rate=lr,  # 학습률 설정
     num_train_epochs=5,  # 학습 에포크 설정
-    evaluation_strategy="epoch",  # 평가 스트레티지 설정
+    #evaluation_strategy="epoch",  # 평가 스트레티지 설정
     per_device_train_batch_size=16,  # 배치 크기 설정
     per_device_eval_batch_size=1,
     save_steps=1000,  # 모델 저장 스텝 설정
@@ -118,4 +128,6 @@ trainer = Trainer(
 )
 
 trainer.train(resume_from_checkpoint = True if get_latest_checkpoint(f'{LOCATION}/model/') else False)
+trainer.evaluate()
+
 trainer.save_model(f"{LOCATION}/gpt2")
