@@ -1,5 +1,5 @@
 from torch.utils.data import Dataset, DataLoader
-from transformers import AutoTokenizer
+from transformers import PreTrainedTokenizerFast
 
 import pandas as pd
 import torch
@@ -7,10 +7,9 @@ import torch
 LOCATION = '.'
 
 # GPT-3 모델과 토크나이저 불러오기
-tokenizer = AutoTokenizer.from_pretrained(
-  'kakaobrain/kogpt', revision='KoGPT6B-ryan1.5b-float16',  # or float32 version: revision=KoGPT6B-ryan1.5b
-  bos_token='[BOS]', eos_token='[EOS]', unk_token='[UNK]', pad_token='[PAD]', mask_token='[MASK]'
-)
+tokenizer = PreTrainedTokenizerFast.from_pretrained("skt/kogpt2-base-v2",
+                                                      bos_token='</s>', eos_token='</s>', unk_token='<unk>',
+                                                      pad_token='<pad>', mask_token='<mask>')
 max_length = 128
 
 # 훈련용 및 검증용 데이터셋 클래스 정의
@@ -24,8 +23,8 @@ class TextDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
-        input_text = f'[bos]{str(self.data.iloc[idx]['text'])}[eos]'
-        output_text = f'[bos]{str(self.data.iloc[idx]['corrected'])}[eos]'
+        input_text = f'</s>{str(self.data.iloc[idx]['text'])}</s>'
+        output_text = f'</s>{str(self.data.iloc[idx]['corrected'])}</s>'
         input_ids = self.tokenizer.encode(input_text, max_length=self.max_length, truncation=True, padding='max_length')
         output_ids = self.tokenizer.encode(output_text, max_length=self.max_length, truncation=True, padding='max_length')
         return {
@@ -35,13 +34,11 @@ class TextDataset(Dataset):
 
 train = pd.read_csv(f'{LOCATION}/train.csv')
 validate = pd.read_csv(f'{LOCATION}/validate.csv')
-train.drop(columns=['id'], inplace=True)
-validate.drop(columns=['id'], inplace=True)
 
 train_dataset = TextDataset(train, tokenizer, max_length)
 validate_dataset = TextDataset(validate, tokenizer, max_length)
 
-from transformers import AutoModelForCausalLM, Trainer, TrainingArguments, DataCollatorForLanguageModeling, TrainerCallback
+from transformers import GPT2LMHeadModel, Trainer, TrainingArguments, DataCollatorForLanguageModeling, TrainerCallback
 from tqdm.notebook import tqdm
 from sklearn.metrics import accuracy_score
 from datasets import load_metric
@@ -58,11 +55,7 @@ if torch.backends.mps.is_available():
 elif torch.cuda.is_available():
     device = torch.device('cuda')
 
-model = AutoModelForCausalLM.from_pretrained(
-  'kakaobrain/kogpt', revision='KoGPT6B-ryan1.5b-float16',  # or float32 version: revision=KoGPT6B-ryan1.5b
-  pad_token_id=tokenizer.eos_token_id,
-  torch_dtype='auto', low_cpu_mem_usage=True
-)
+model = GPT2LMHeadModel.from_pretrained("skt/kogpt2-base-v2")
 lr=2e-5
 SAVE_PATH = f"{LOCATION}/all_metrics.pkl"
 
@@ -89,29 +82,28 @@ def compute_metrics(eval_pred):
 
     return {"bleu": bleu_score["score"]}
 
-data_collactor = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
-
 class EmptyCacheCallback(TrainerCallback):
     """훈련의 각 로그 스텝마다 CUDA 캐시를 비우는 콜백"""
 
     def on_log(self, args, state, control, **kwargs):
         """로그 이벤트가 발생할 때 CUDA 캐시를 비웁니다."""
+        gc.collect()
         torch.mps.empty_cache()
 
+data_collactor = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+
 training_args = TrainingArguments(
-    eval_accumulation_steps=2,
     output_dir=f"{LOCATION}/model", # 모델 저장 경로
     overwrite_output_dir=True,  # 기존 모델을 덮어쓰기
     learning_rate=lr,  # 학습률 설정
     num_train_epochs=5,  # 학습 에포크 설정
     evaluation_strategy="epoch",  # 평가 스트레티지 설정
     per_device_train_batch_size=16,  # 배치 크기 설정
-    per_device_eval_batch_size=4,
-    save_strategy="no",
-    #save_steps=1000,  # 모델 저장 스텝 설정
-    #save_total_limit=10,  # 최대 모델 저장 개수 설정
+    per_device_eval_batch_size=1,
+    save_steps=1000,  # 모델 저장 스텝 설정
+    save_total_limit=10,  # 최대 모델 저장 개수 설정
     warmup_steps=500,  # 워밍업 스텝 설정
-    weight_decay=0.01
+    weight_decay=0.01,
 )
 
 trainer = Trainer(
