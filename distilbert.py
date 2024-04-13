@@ -7,7 +7,7 @@ import torch
 LOCATION = '.'
 
 # GPT-3 모델과 토크나이저 불러오기
-tokenizer = AutoTokenizer.from_pretrained('monologg/kobert')
+tokenizer = AutoTokenizer.from_pretrained('monologg/distilkobert')
 max_length = 128
 
 class TextDataset(Dataset):
@@ -111,7 +111,8 @@ class EmptyCacheCallback(TrainerCallback):
 data_collactor = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
 training_args = TrainingArguments(
-    output_dir=f"{LOCATION}/model", # 모델 저장 경로
+    eval_accumulation_steps=2,
+    output_dir=f"{LOCATION}/bart", # 모델 저장 경로
     overwrite_output_dir=True,  # 기존 모델을 덮어쓰기
     learning_rate=lr,  # 학습률 설정
     num_train_epochs=20,  # 학습 에포크 설정
@@ -132,7 +133,7 @@ trainer = Trainer(
     data_collator=data_collactor,
     tokenizer=tokenizer,
     compute_metrics=compute_metrics,
-    callbacks=[EmptyCacheCallback()]
+    callbacks=[EmptyCacheCallback()],
 )
 
 trainer.train(resume_from_checkpoint = True if get_latest_checkpoint(f'{LOCATION}/bart/') else False)
