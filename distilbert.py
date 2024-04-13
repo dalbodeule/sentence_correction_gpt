@@ -50,8 +50,8 @@ class TextDataset(Dataset):
             'labels': output_ids
         }
 
-train = pd.read_csv(f'{LOCATION}/train.csv')
-validate = pd.read_csv(f'{LOCATION}/validate.csv')
+train = pd.read_csv(f'{LOCATION}/train.csv', chunksize=5000)
+validate = pd.read_csv(f'{LOCATION}/validate.csv', chunksize=5000)
 
 train_dataset = TextDataset(train, tokenizer, max_length)
 validate_dataset = TextDataset(validate, tokenizer, max_length)
