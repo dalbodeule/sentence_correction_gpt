@@ -1,30 +1,44 @@
-from torch.utils.data import Dataset, dataloader
+from torch.utils.data import Dataset
 from transformers import AutoTokenizer
+from typing import Tuple
 
 import pandas as pd
+import numpy as np
 import torch
 
 LOCATION = '.'
 
 # GPT-3 모델과 토크나이저 불러오기
-tokenizer = AutoTokenizer.from_pretrained('monologg/distilkobert')
+tokenizer = AutoTokenizer.from_pretrained('monologg/kobert')
 max_length = 128
 
-class TextDataset(Dataset):
-    def __init__(self, data, tokenizer, max_length):
-        self.data = data
+class ChunkedTextDataset(Dataset):
+    def __init__(self, file_path: str, tokenizer, max_length, chunksize=3000):
+        self.file_path = file_path
         self.tokenizer = tokenizer
         self.max_length = max_length
+        self.chunksize = chunksize
         self.bos_token = '[CLS]'
         self.eos_token = '[SEP]'
 
+        self.total_rows = self.total_rows = pd.read_csv(file_path).shape[0]
+        
+        self.reader = pd.read_csv(file_path, chunksize=chunksize, iterator=True)
+        self.current_chunk = None
+        self.chunk_idx = 0
+
     def __len__(self):
-        return len(self.data)
+        return self.total_rows
 
     def __getitem__(self, idx):
-        input_text = str(self.data.iloc[idx]['text'])
-        corrected_text = str(self.data.iloc[idx]['corrected'])
-
+        chunk_row = idx % self.chunksize
+        if self.current_chunk is None or chunk_row == 0:
+            self.current_chunk = next(self.reader)
+        
+        row = self.current_chunk.iloc[chunk_row]
+        input_text = str(row['text'])
+        corrected_text = str(row['corrected'])
+        
         input_encodings = self.tokenizer.encode_plus(
             self.bos_token + input_text + self.eos_token,
             max_length=self.max_length,
@@ -39,27 +53,22 @@ class TextDataset(Dataset):
             padding='max_length',
             return_tensors='pt'
         )
-
+        
         input_ids = input_encodings['input_ids'].squeeze()
         attention_mask = input_encodings['attention_mask'].squeeze()
         output_ids = output_encodings['input_ids'].squeeze()
-
+        
         return {
             'input_ids': input_ids,
             'attention_mask': attention_mask,
             'labels': output_ids
         }
 
-train = pd.read_csv(f'{LOCATION}/train.csv', chunksize=5000)
-validate = pd.read_csv(f'{LOCATION}/validate.csv', chunksize=5000)
-
-train_dataset = TextDataset(train, tokenizer, max_length)
-validate_dataset = TextDataset(validate, tokenizer, max_length)
+train_dataset = ChunkedTextDataset(f'{LOCATION}/train.csv', tokenizer, max_length)
+validate_dataset = ChunkedTextDataset(f'{LOCATION}/validate.csv', tokenizer, max_length)
 
 from transformers import AutoModelForMaskedLM, Trainer, TrainingArguments, DataCollatorForLanguageModeling, TrainerCallback
-from tqdm.notebook import tqdm
-from sklearn.metrics import accuracy_score
-from datasets import load_metric
+from evaluate import load
 
 import torch
 import pickle
@@ -73,9 +82,10 @@ if torch.backends.mps.is_available():
 elif torch.cuda.is_available():
     device = torch.device('cuda')
 
-model = AutoModelForMaskedLM.from_pretrained('monologg/distilkobert')
+model = AutoModelForMaskedLM.from_pretrained('monologg/kobert')
 lr=2e-5
 SAVE_PATH = f"{LOCATION}/all_metrics.pkl"
+metric_bleu = load("bleu")
 
 if os.path.exists(SAVE_PATH):
     with open(SAVE_PATH, "rb") as f:
@@ -90,15 +100,32 @@ def get_latest_checkpoint(path):
     else:
         return None
 
-def compute_metrics(eval_pred):
-    metric_bleu = load_metric("bleu")
+def compute_metrics(eval_pred: Tuple[torch.Tensor, torch.Tensor]):
     predictions, labels = eval_pred
     decoded_preds = tokenizer.batch_decode(predictions, skip_special_tokens=True)
+
+    labels = np.array(labels)
+    neg_labels = labels < 0
+    if np.any(neg_labels):
+        labels[neg_labels] = 0
+
     decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
 
     bleu_score = metric_bleu.compute(predictions=decoded_preds, references=[[label] for label in decoded_labels])
+    score = {"bleu": bleu_score["bleu"], "train_loss": 0, "val_loss": 0}
 
-    return {"bleu": bleu_score["score"]}
+    all_metrics.append(score)
+    with open(SAVE_PATH, 'wb') as f:
+        pickle.dump(all_metrics, f) 
+
+    return score
+
+def preprocess_logits_for_metrics(logits, labels):
+        if isinstance(logits, tuple):
+            # Depending on the model and config, logits may contain extra tensors,
+            # like past_key_values, but logits always come first
+            logits = logits[0]
+        return logits.argmax(dim=-1)
 
 class EmptyCacheCallback(TrainerCallback):
     """훈련의 각 로그 스텝마다 CUDA 캐시를 비우는 콜백"""
@@ -111,18 +138,19 @@ class EmptyCacheCallback(TrainerCallback):
 data_collactor = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
 training_args = TrainingArguments(
-    eval_accumulation_steps=2,
+    eval_accumulation_steps=8,
     output_dir=f"{LOCATION}/bart", # 모델 저장 경로
     overwrite_output_dir=True,  # 기존 모델을 덮어쓰기
     learning_rate=lr,  # 학습률 설정
     num_train_epochs=20,  # 학습 에포크 설정
     evaluation_strategy="epoch",  # 평가 스트레티지 설정
     per_device_train_batch_size=16,  # 배치 크기 설정
-    per_device_eval_batch_size=1,
+    per_device_eval_batch_size=16,
     save_steps=1000,  # 모델 저장 스텝 설정
     save_total_limit=10,  # 최대 모델 저장 개수 설정
     warmup_steps=500,  # 워밍업 스텝 설정
     weight_decay=0.01,
+    optim="adafactor"
 )
 
 trainer = Trainer(
@@ -133,10 +161,11 @@ trainer = Trainer(
     data_collator=data_collactor,
     tokenizer=tokenizer,
     compute_metrics=compute_metrics,
+    preprocess_logits_for_metrics=preprocess_logits_for_metrics,
     callbacks=[EmptyCacheCallback()],
 )
 
 trainer.train(resume_from_checkpoint = True if get_latest_checkpoint(f'{LOCATION}/bart/') else False)
 trainer.evaluate()
 
-trainer.save_model(f"{LOCATION}/gpt2")
+trainer.save_model(f"{LOCATION}/bart")
