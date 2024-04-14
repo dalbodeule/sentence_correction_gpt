@@ -12,7 +12,7 @@ LOCATION = '.'
 tokenizer = AutoTokenizer.from_pretrained('monologg/kobert')
 max_length = 128
 
-class ChunkedTextDataset(Dataset):
+class TextDataset(Dataset):
     def __init__(self, file_path: str, tokenizer, max_length, chunksize=3000):
         self.file_path = file_path
         self.tokenizer = tokenizer
@@ -20,22 +20,14 @@ class ChunkedTextDataset(Dataset):
         self.chunksize = chunksize
         self.bos_token = '[CLS]'
         self.eos_token = '[SEP]'
-
-        self.total_rows = self.total_rows = pd.read_csv(file_path).shape[0]
         
-        self.reader = pd.read_csv(file_path, chunksize=chunksize, iterator=True)
-        self.current_chunk = None
-        self.chunk_idx = 0
+        self.reader = pd.read_csv(file_path)
 
     def __len__(self):
-        return self.total_rows
+        return len(self.reader)
 
     def __getitem__(self, idx):
-        chunk_row = idx % self.chunksize
-        if self.current_chunk is None or chunk_row == 0:
-            self.current_chunk = next(self.reader)
-        
-        row = self.current_chunk.iloc[chunk_row]
+        row = self.reader.iloc[idx]
         input_text = str(row['text'])
         corrected_text = str(row['corrected'])
         
@@ -64,8 +56,8 @@ class ChunkedTextDataset(Dataset):
             'labels': output_ids
         }
 
-train_dataset = ChunkedTextDataset(f'{LOCATION}/train.csv', tokenizer, max_length)
-validate_dataset = ChunkedTextDataset(f'{LOCATION}/validate.csv', tokenizer, max_length)
+train_dataset = TextDataset(f'{LOCATION}/train.csv', tokenizer, max_length)
+validate_dataset = TextDataset(f'{LOCATION}/validate.csv', tokenizer, max_length)
 
 from transformers import AutoModelForMaskedLM, Trainer, TrainingArguments, DataCollatorForLanguageModeling, TrainerCallback
 from evaluate import load
