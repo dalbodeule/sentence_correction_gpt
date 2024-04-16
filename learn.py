@@ -110,7 +110,7 @@ def compute_metrics(eval_pred: Tuple[torch.Tensor, torch.Tensor]):
     bleu_score = metric_bleu.compute(predictions=decoded_preds, references=[[label] for label in decoded_labels])
     rouge_score = metric_rouge.compute(predictions=decoded_preds, references=decoded_labels)
     meteor_score = metric_meteor.compute(predictions=decoded_preds, references=decoded_labels)
-    score = {"bleu": bleu_score["bleu"], "rouge": rouge_score['rouge_l'].mid.fmeasure, "meteor": meteor_score["meteor"]}
+    score = {"bleu": bleu_score["bleu"], "rouge": rouge_score['rougeL'], "meteor": meteor_score["meteor"]}
 
     all_metrics.append(score)
     with open(SAVE_PATH, 'wb') as f:
