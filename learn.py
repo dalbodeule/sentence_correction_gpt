@@ -9,7 +9,7 @@ import torch
 LOCATION = '.'
 
 # GPT-3 모델과 토크나이저 불러오기
-tokenizer = PreTrainedTokenizerFast.from_pretrained("skt/kogpt2-base-v2",
+tokenizer = PreTrainedTokenizerFast.from_pretrained('gogamza/kobart-base-v2',
     bos_token='</s>', eos_token='</s>', unk_token='<unk>',
     pad_token='<pad>', mask_token='<mask>')
 max_length = 128
@@ -61,7 +61,7 @@ class TextDataset(Dataset):
 train_dataset = TextDataset(f'{LOCATION}/train.csv', tokenizer, max_length)
 validate_dataset = TextDataset(f'{LOCATION}/validate.csv', tokenizer, max_length)
 
-from transformers import GPT2LMHeadModel, Trainer, TrainingArguments, DataCollatorForLanguageModeling, TrainerCallback
+from transformers import BartForConditionalGeneration, Trainer, TrainingArguments, DataCollatorForLanguageModeling, TrainerCallback
 from evaluate import load
 
 import torch
@@ -76,7 +76,7 @@ if torch.backends.mps.is_available():
 elif torch.cuda.is_available():
     device = torch.device('cuda')
 
-model = GPT2LMHeadModel.from_pretrained('skt/kogpt2-base-v2')
+model = BartForConditionalGeneration.from_pretrained('gogamza/kobart-base-v2')
 lr=2e-5
 SAVE_PATH = f"{LOCATION}/all_metrics.pkl"
 metric_bleu = load("bleu")
@@ -137,7 +137,7 @@ data_collactor = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
 training_args = TrainingArguments(
     eval_accumulation_steps=8,
-    output_dir=f"{LOCATION}/model", # 모델 저장 경로
+    output_dir=f"{LOCATION}/model-bart", # 모델 저장 경로
     overwrite_output_dir=True,  # 기존 모델을 덮어쓰기
     learning_rate=lr,  # 학습률 설정
     num_train_epochs=20,  # 학습 에포크 설정
@@ -163,7 +163,7 @@ trainer = Trainer(
     callbacks=[EmptyCacheCallback()],
 )
 
-trainer.train(resume_from_checkpoint = True if get_latest_checkpoint(f'{LOCATION}/model') else False)
+trainer.train(resume_from_checkpoint = True if get_latest_checkpoint(f'{LOCATION}/model-bart') else False)
 trainer.evaluate()
 
-trainer.save_model(f"{LOCATION}/gpt2")
+trainer.save_model(f"{LOCATION}/bart")
