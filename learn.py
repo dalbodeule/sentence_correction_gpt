@@ -61,7 +61,7 @@ class TextDataset(Dataset):
 train_dataset = TextDataset(f'{LOCATION}/train.csv', tokenizer, max_length)
 validate_dataset = TextDataset(f'{LOCATION}/validate.csv', tokenizer, max_length)
 
-from transformers import BartForConditionalGeneration, Trainer, TrainingArguments, DataCollatorForLanguageModeling, TrainerCallback
+from transformers import BartForConditionalGeneration, Trainer, TrainingArguments, DataCollatorForLanguageModeling, TrainerCallback, GenerationConfig
 from evaluate import load
 
 import torch
@@ -76,7 +76,15 @@ if torch.backends.mps.is_available():
 elif torch.cuda.is_available():
     device = torch.device('cuda')
 
-model = BartForConditionalGeneration.from_pretrained('gogamza/kobart-base-v2')
+generationConfig = GenerationConfig(
+    eos_token_id=tokenizer.eos_token_id,
+    pad_token=tokenizer.pad_token_id,
+    early_stopping=True,
+    decoder_start_token_id=0,
+    num_beams=4
+)
+
+model = BartForConditionalGeneration.from_pretrained('gogamza/kobart-base-v2', config = generationConfig)
 lr=2e-5
 SAVE_PATH = f"{LOCATION}/all_metrics.pkl"
 metric_bleu = load("bleu")
