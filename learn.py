@@ -61,7 +61,7 @@ class TextDataset(Dataset):
 train_dataset = TextDataset(f'{LOCATION}/train.csv', tokenizer, max_length)
 validate_dataset = TextDataset(f'{LOCATION}/validate.csv', tokenizer, max_length)
 
-from transformers import BartForConditionalGeneration, Trainer, TrainingArguments, DataCollatorForLanguageModeling, TrainerCallback, GenerationConfig
+from transformers import BartForConditionalGeneration, Trainer, Seq2SeqTrainingArguments, DataCollatorForSeq2Seq, TrainerCallback
 from evaluate import load
 
 import torch
@@ -76,15 +76,7 @@ if torch.backends.mps.is_available():
 elif torch.cuda.is_available():
     device = torch.device('cuda')
 
-generationConfig = GenerationConfig(
-    eos_token_id=tokenizer.eos_token_id,
-    pad_token=tokenizer.pad_token_id,
-    early_stopping=True,
-    decoder_start_token_id=0,
-    num_beams=4
-)
-
-model = BartForConditionalGeneration.from_pretrained('gogamza/kobart-base-v2', config = generationConfig)
+model = BartForConditionalGeneration.from_pretrained('gogamza/kobart-base-v2')
 lr=2e-5
 SAVE_PATH = f"{LOCATION}/all_metrics.pkl"
 metric_bleu = load("bleu")
@@ -141,9 +133,9 @@ class EmptyCacheCallback(TrainerCallback):
         gc.collect()
         torch.mps.empty_cache()
 
-data_collactor = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+data_collactor = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=model)
 
-training_args = TrainingArguments(
+training_args = Seq2SeqTrainingArguments(
     eval_accumulation_steps=8,
     output_dir=f"{LOCATION}/model-bart", # 모델 저장 경로
     overwrite_output_dir=True,  # 기존 모델을 덮어쓰기
@@ -156,7 +148,8 @@ training_args = TrainingArguments(
     save_total_limit=10,  # 최대 모델 저장 개수 설정
     warmup_steps=500,  # 워밍업 스텝 설정
     weight_decay=0.01,
-    optim="adafactor"
+    optim="adafactor",
+    predict_with_generate=True,
 )
 
 trainer = Trainer(
