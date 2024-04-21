@@ -234,6 +234,7 @@ data/
 *.csv
 model/
 bart/
+model-bart/
 gpt/
 all_metrics.pkl
 

@@ -8,10 +8,7 @@ import torch
 
 LOCATION = '.'
 
-# GPT-3 모델과 토크나이저 불러오기
-tokenizer = PreTrainedTokenizerFast.from_pretrained('gogamza/kobart-base-v2',
-    bos_token='</s>', eos_token='</s>', unk_token='<unk>',
-    pad_token='<pad>', mask_token='<mask>')
+tokenizer = PreTrainedTokenizerFast.from_pretrained('gogamza/kobart-base-v2')
 max_length = 128
 
 class TextDataset(Dataset):
@@ -20,8 +17,8 @@ class TextDataset(Dataset):
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.chunksize = chunksize
-        self.bos_token = '</s>'
-        self.eos_token = '</s>'
+        self.bos_token = self.tokenizer.bos_token
+        self.eos_token = self.tokenizer.eos_token
         
         self.reader = pd.read_csv(file_path)
 
