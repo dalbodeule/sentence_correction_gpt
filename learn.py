@@ -85,7 +85,7 @@ metric_meteor = load("meteor")
 if os.path.exists(SAVE_PATH):
     all_metrics = pd.read_csv(SAVE_PATH)
 else:
-    all_metrics = pd.DataFrame(columns=["train_loss", "val_loss", "bleu", "rouge", "meteor"])
+    all_metrics = pd.DataFrame(columns=["bleu", "rouge", "meteor"])
 
 def get_latest_checkpoint(path):
     checkpoints = [f for f in os.listdir(path) if f.startswith('checkpoint-')]
@@ -108,7 +108,8 @@ def compute_metrics(eval_pred: Tuple[torch.Tensor, torch.Tensor]):
     bleu_score = metric_bleu.compute(predictions=decoded_preds, references=[[label] for label in decoded_labels])
     rouge_score = metric_rouge.compute(predictions=decoded_preds, references=decoded_labels)
     meteor_score = metric_meteor.compute(predictions=decoded_preds, references=decoded_labels)
-    score = {"bleu": bleu_score["bleu"], "rouge": rouge_score['rougeL'], "meteor": meteor_score["meteor"], "train_loss": eval_pred.metrics["train_loss"], "val_loss": eval_pred.metrics["eval_loss"],}
+
+    score = {"bleu": bleu_score["bleu"], "rouge": rouge_score['rougeL'], "meteor": meteor_score["meteor"]}
 
     all_metrics.loc[len(all_metrics)] = score
     all_metrics.to_csv(SAVE_PATH)
