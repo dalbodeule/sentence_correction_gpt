@@ -236,6 +236,6 @@ model/
 bart/
 model-bart/
 gpt/
-all_metrics.pkl
+all_metrics.csv
 
 # End of https://www.toptal.com/developers/gitignore/api/macos,python,venv,jupyternotebooks

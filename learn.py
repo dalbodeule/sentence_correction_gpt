@@ -8,8 +8,10 @@ import torch
 
 LOCATION = '.'
 
-tokenizer = PreTrainedTokenizerFast.from_pretrained('gogamza/kobart-base-v2')
+tokenizer = PreTrainedTokenizerFast.from_pretrained('gogamza/kobart-base-v2', bos_token="<s>", eos_token="</s>")
 max_length = 128
+
+print(f"BOS_TOKEN: {tokenizer.bos_token}, EOS_TOKEN: {tokenizer.eos_token}")
 
 class TextDataset(Dataset):
     def __init__(self, file_path: str, tokenizer, max_length, chunksize=3000):
@@ -75,16 +77,15 @@ elif torch.cuda.is_available():
 
 model = BartForConditionalGeneration.from_pretrained('gogamza/kobart-base-v2')
 lr=2e-5
-SAVE_PATH = f"{LOCATION}/all_metrics.pkl"
+SAVE_PATH = f"{LOCATION}/all_metrics.csv"
 metric_bleu = load("bleu")
 metric_rouge = load("rouge")
 metric_meteor = load("meteor")
 
 if os.path.exists(SAVE_PATH):
-    with open(SAVE_PATH, "rb") as f:
-        all_metrics = pickle.load(f)
+    all_metrics = pd.read_csv(SAVE_PATH)
 else:
-    all_metrics = []
+    all_metrics = pd.DataFrame(columns=["train_loss", "val_loss", "bleu", "rouge", "meteor"])
 
 def get_latest_checkpoint(path):
     checkpoints = [f for f in os.listdir(path) if f.startswith('checkpoint-')]
@@ -107,11 +108,10 @@ def compute_metrics(eval_pred: Tuple[torch.Tensor, torch.Tensor]):
     bleu_score = metric_bleu.compute(predictions=decoded_preds, references=[[label] for label in decoded_labels])
     rouge_score = metric_rouge.compute(predictions=decoded_preds, references=decoded_labels)
     meteor_score = metric_meteor.compute(predictions=decoded_preds, references=decoded_labels)
-    score = {"bleu": bleu_score["bleu"], "rouge": rouge_score['rougeL'], "meteor": meteor_score["meteor"]}
+    score = {"bleu": bleu_score["bleu"], "rouge": rouge_score['rougeL'], "meteor": meteor_score["meteor"], "train_loss": eval_pred.metrics["train_loss"], "val_loss": eval_pred.metrics["eval_loss"],}
 
-    all_metrics.append(score)
-    with open(SAVE_PATH, 'wb') as f:
-        pickle.dump(all_metrics, f) 
+    all_metrics.loc[len(all_metrics)] = score
+    all_metrics.to_csv(SAVE_PATH)
 
     return score
 
@@ -145,7 +145,6 @@ training_args = Seq2SeqTrainingArguments(
     save_total_limit=10,  # 최대 모델 저장 개수 설정
     warmup_steps=500,  # 워밍업 스텝 설정
     weight_decay=0.01,
-    optim="adafactor",
     predict_with_generate=True,
 )
 
